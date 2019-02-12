@@ -11,6 +11,11 @@ base_url = 'https://api.darksky.net/forecast'
 
 def get_forecast(api_key: str, lat: float, lng: float, time: dt.datetime=None, session:requests.Session=None,
                  solar:bool=False, **params) -> dict:
+    r = _req_forecast(api_key=api_key, lat=lat, lng=lng, time=time, session=session, solar=solar, **params)
+    return r.json()
+
+def _req_forecast(api_key: str, lat: float, lng: float, time: dt.datetime=None, session:requests.Session=None,
+                  solar:bool=False, **params) -> requests.Response:
     url = f'{base_url}/{api_key}/{lat},{lng}'
     if time is not None:
         time_str = time.replace(microsecond=0).isoformat()
@@ -24,7 +29,7 @@ def get_forecast(api_key: str, lat: float, lng: float, time: dt.datetime=None, s
     else:
         r = requests.get(url=url, params=params)
     r.raise_for_status()
-    return r.json()
+    return r
 
 def datablock_to_dataframe(d: dict) -> pd.DataFrame:
     df = pd.DataFrame(d)
