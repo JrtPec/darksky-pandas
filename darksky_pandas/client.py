@@ -1,6 +1,6 @@
 import requests
 import datetime as dt
-from typing import Union, Iterator
+from typing import Union, Iterator, Tuple
 import pandas as pd
 from dateutil import rrule
 from tqdm import tqdm
@@ -55,6 +55,7 @@ def forecast_to_daily_dataframe(d: dict) -> pd.DataFrame:
     df = datablock_to_dataframe(d['daily']['data'])
     df = df.tz_convert(d['timezone'])
 
+    """
     if 'hourly' in d:
         hourly = hourly_to_dataframe(d['hourly']['data'])
         hourly = hourly.tz_convert(d['timezone'])
@@ -65,6 +66,7 @@ def forecast_to_daily_dataframe(d: dict) -> pd.DataFrame:
         hourly = hourly.resample('d').agg({'temperature': np.mean, 'solarGhi': np.sum})
 
         df = df.join(hourly)
+    """
     return df
 
 def dayset(start: Union[dt.datetime, pd.Timestamp], end: Union[dt.datetime, pd.Timestamp]) -> Iterator[dt.datetime]:
@@ -87,6 +89,24 @@ def get_daily_dataframe(api_key: str, lat: float, lng: float, start: pd.Timestam
     df = pd.concat(frames, sort=True)
     return df
 
+def get_daily_and_hourly_dataframes(api_key: str, lat: float, lng: float, start: pd.Timestamp, end: pd.Timestamp,
+                        session: requests.Session=None, solar: bool=True, **params) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    days = dayset(start=start, end=end)
+    day_frames = []
+    hour_frames = []
+    for date in tqdm(days):
+        time = dt.datetime(year=date.year, month=date.month, day=date.day)
+        f = get_forecast(api_key=api_key, lat=lat, lng=lng, time=time, session=session, solar=solar, **params)
+        day_frame = forecast_to_daily_dataframe(f)
+        hour_frame = hourly_to_dataframe(f['hourly']['data'])
+        hour_frame = hour_frame.tz_convert(f['timezone'])
+        day_frames.append(day_frame)
+        hour_frames.append(hour_frame)
+    day_df = pd.concat(day_frames, sort=True)
+    hour_df = pd.concat(hour_frames, sort=True)
+
+    return day_df, hour_df
+
 class Client:
     def __init__(self, api_key: str):
         self.api_key = api_key
@@ -96,3 +116,8 @@ class Client:
                             **params) -> pd.DataFrame:
         return get_daily_dataframe(api_key=self.api_key, lat=lat, lng=lng, start=start, end=end, session=self.session,
                                    solar=solar, **params)
+
+    def get_daily_and_hourly_dataframes(self, lat: float, lng: float, start: pd.Timestamp, end: pd.Timestamp,
+                                        solar: bool=True, **params) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        return get_daily_and_hourly_dataframes(api_key=self.api_key, lat=lat, lng=lng, start=start, end=end,
+                                               session=self.session, solar=solar, **params)
