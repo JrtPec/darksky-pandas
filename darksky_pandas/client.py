@@ -10,8 +10,8 @@ base_url = 'https://api.darksky.net/forecast'
 
 
 def get_forecast(api_key: str, lat: float, lng: float, time: dt.datetime=None, session:requests.Session=None,
-                 solar:bool=False, **params) -> dict:
-    r = _req_forecast(api_key=api_key, lat=lat, lng=lng, time=time, session=session, solar=solar, **params)
+                 solar:bool=False, units='si', **params) -> dict:
+    r = _req_forecast(api_key=api_key, lat=lat, lng=lng, time=time, session=session, solar=solar, units=units, **params)
     return r.json()
 
 def _req_forecast(api_key: str, lat: float, lng: float, time: dt.datetime=None, session:requests.Session=None,
@@ -33,9 +33,8 @@ def _req_forecast(api_key: str, lat: float, lng: float, time: dt.datetime=None, 
 
 def datablock_to_dataframe(d: dict) -> pd.DataFrame:
     df = pd.DataFrame(d)
-    df['time'] = pd.to_datetime(df['time'], unit='s')
+    df['time'] = pd.to_datetime(df['time'], unit='s', utc=True)
     df.set_index('time', inplace=True)
-    df = df.tz_localize('UTC')
     return df
 
 def hourly_to_dataframe(d: dict) -> pd.DataFrame:
@@ -55,18 +54,17 @@ def forecast_to_daily_dataframe(d: dict) -> pd.DataFrame:
     df = datablock_to_dataframe(d['daily']['data'])
     df = df.tz_convert(d['timezone'])
 
-    """
     if 'hourly' in d:
         hourly = hourly_to_dataframe(d['hourly']['data'])
         hourly = hourly.tz_convert(d['timezone'])
 
-        assert 'temperature' in hourly.columns
-        assert 'solarGhi' in hourly.columns
+        agg = {'temperature': np.mean, 'solarGhi': np.sum}
+        agg = {column: agg[column] for column in agg if column in hourly.columns}
 
-        hourly = hourly.resample('d').agg({'temperature': np.mean, 'solarGhi': np.sum})
+        hourly = hourly.resample('d').agg(agg)
+        hourly = hourly.round(2)
 
         df = df.join(hourly)
-    """
     return df
 
 def dayset(start: Union[dt.datetime, pd.Timestamp], end: Union[dt.datetime, pd.Timestamp]) -> Iterator[dt.datetime]:
